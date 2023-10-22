@@ -1,0 +1,17 @@
+metadata:
+    language: v1-beta
+    name: "Information Disclosure in URLs"
+    description: "Checks for URLs containing potentially sensitive information"
+    author: "Kaustubh"
+
+given request then
+    if ({base.request.url} matches "token=") or 
+       ({base.request.url} matches "apikey=") or 
+       ({base.request.url} matches "secret=") or 
+       ({base.request.url} matches "password=") then
+        report issue:
+            severity: medium
+            confidence: firm
+            detail: "URL contains potentially sensitive information."
+            remediation: "Avoid passing sensitive information in URLs."
+    end if
