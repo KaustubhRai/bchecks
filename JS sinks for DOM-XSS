@@ -1,0 +1,16 @@
+metadata:
+    language: v1-beta
+    name: "JS sinks for DOM-XSS (passive)"
+    description: "JavaScript sink that could lead to DOM-XSS."
+    author: "Lisandre.com"
+    tags: "passive"
+
+given response then
+    #https://portswigger.net/web-security/cross-site-scripting/dom-based#exploiting-dom-xss-with-different-sources-and-sinks
+    if {latest.response} matches "document.write|document.writeln|document.domain|\.innerHTML|\.outerHTML|\.insertAdjacentHTML|\.onevent" then
+        report issue:
+            severity: info
+            confidence: firm
+            detail: "JavaScript sink that could lead to DOM-XSS."
+            remediation: "Investigate if this sink can be used to do a DOM-XSS."
+    end if
