@@ -1,0 +1,71 @@
+metadata:
+    language: v1-beta
+    name: "Open Redirect Checks"
+    description: "Open Redirect"
+    author: "SirBugs, xelkomy"
+
+run for each:
+    # you could add more values to this list to make the check repeat
+    potential_path =
+       "/https://oastify.com/",
+       "//https://oastify.com//",
+       "/?targetOrigin=https://oastify.com/",
+       "/?fallback=https://oastify.com/",
+       "/?query=https://oastify.com/",
+       "/?redirection_url=https://oastify.com/",
+       "/?next=https://oastify.com/",
+       "/?ref_url=https://oastify.com/",
+       "/?state=https://oastify.com/",
+       "/?1=https://oastify.com/",
+       "/?redirect_uri=https://oastify.com/",
+       "/?forum_reg=https://oastify.com/",
+       "/?return_to=https://oastify.com/",
+       "/?redirect_url=https://oastify.com/",
+       "/?return_url=https://oastify.com/",
+       "/?host=https://oastify.com/",
+       "/?url=https://oastify.com/",
+       "/?redirectto=https://oastify.com/",
+       "/?return=https://oastify.com/",
+       "/?prejoin_data=https://oastify.com/",
+       "/?callback_url=https://oastify.com/",
+       "/?path=https://oastify.com/",
+       "/?authorize_callback=https://oastify.com/",
+       "/?email=https://oastify.com/",
+       "/?origin=https://oastify.com/",
+       "/?continue=https://oastify.com/",
+       "/?domain_name=https://oastify.com/",
+       "/?redir=https://oastify.com/",
+       "/?wp_http_referer=https://oastify.com/",
+       "/?endpoint=https://oastify.com/",
+       "/?shop=https://oastify.com/",
+       "/?qpt_question_url=https://oastify.com/",
+       "/?checkout_url=https://oastify.com/",
+       "/?ref_url=https://oastify.com/",
+       "/?redirect_to=https://oastify.com/",
+       "/?succUrl=https://oastify.com/",
+       "/?file=https://oastify.com/",
+       "/?link=https://oastify.com/",
+       "/?referrer=https://oastify.com/",
+       "/?recipient=https://oastify.com/",
+       "/?redirect=https://oastify.com/",
+       "/?u=https://oastify.com/",
+       "/?hostname=https://oastify.com/",
+       "/?returnTo=https://oastify.com/",
+       "/?return_path=https://oastify.com/",
+       "/?image=https://oastify.com/",
+       "/?requestTokenAndRedirect=https://oastify.com/",
+       "/?retURL=https://oastify.com/",
+       "/?next_url=https://oastify.com/"
+
+given host then
+    send request called check:
+        method: "GET"
+        path: {potential_path}
+
+    if "Location: https://oastify.com" in {check.response.headers} then
+        report issue:
+            severity: low
+            confidence: certain
+            detail: `Open Redirect found at {potential_path}.`
+            remediation: "Ensure your website is not redirecting the users outside it without whitelist."
+    end if
