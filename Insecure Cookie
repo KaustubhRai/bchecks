@@ -1,0 +1,30 @@
+metadata:
+    language: v1-beta
+    name: "Insecure Cookie Attributes"
+    description: "Checks for cookies without the Secure, HttpOnly, or SameSite attributes"
+    author: "Kaustubh"
+
+given response then
+    if {latest.response.headers} matches "Set-Cookie:" and not ({latest.response.headers} matches "Secure") then
+        report issue:
+            severity: medium
+            confidence: firm
+            detail: "Cookie set without the Secure attribute."
+            remediation: "Set the Secure attribute for all cookies."
+    end if
+
+    if {latest.response.headers} matches "Set-Cookie:" and not ({latest.response.headers} matches "HttpOnly") then
+        report issue:
+            severity: medium
+            confidence: firm
+            detail: "Cookie set without the HttpOnly attribute."
+            remediation: "Set the HttpOnly attribute for all cookies."
+    end if
+
+    if {latest.response.headers} matches "Set-Cookie:" and not ({latest.response.headers} matches "SameSite") then
+        report issue:
+            severity: medium
+            confidence: firm
+            detail: "Cookie set without the SameSite attribute."
+            remediation: "Set the SameSite attribute for all cookies."
+    end if
