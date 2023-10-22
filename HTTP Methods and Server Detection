@@ -1,0 +1,79 @@
+metadata:
+    language: v1-beta
+    name: "HTTP Methods and Server Detection"
+    description: "Checks multiple HTTP methods, detects server/proxy types, identifies enabled TRACE method, examines headers for software versions and custom values, and inspects for redirections"
+    author: "Kaustubh"
+
+define:
+    desc = "The service that the application uses was detected"
+
+run for each:
+    method_list = 
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS",
+        "TRACE",
+        "PATCH",
+        "HEAD",
+        "CONNECT"
+
+given request then
+    send request called check:
+        method: {method_list}
+
+    # Server and X-Powered-By header checks
+    if {check.response.headers} matches "[Xx](-|_)[Pp]owered(-|_)[Bb]y:[^\n]+" then
+        report issue:
+            severity: info
+            confidence: firm
+            detail: `{desc} via {method_list} method. Detected from HTTP X-Powered-By header.`
+            remediation: "Review and configure server headers."
+    end if
+
+    if {check.response.headers} matches "([Xx](-|_)|)[Ss]erver:[^\n]+" then
+        report issue:
+            severity: info
+            confidence: firm
+            detail: `{desc} via {method_list} method. Detected from HTTP Server header.`
+            remediation: "Review and configure server headers."
+    end if
+
+    # Error page check
+    if {check.response.status_code} is "400" and {check.response.body} matches "center>[NnAa](ginx|pache)" then
+        report issue:
+            severity: info
+            confidence: firm
+            detail: `{desc} via {method_list} method. Detected from 400 status code response.`
+            remediation: "Review server configuration and error pages."
+    end if
+
+    # TRACE method check
+    if {method_list} is "TRACE" and {check.response.status_code} is "200" then
+        report issue:
+            severity: medium
+            confidence: firm
+            detail: "TRACE method enabled on the server. Potential for Cross-Site Tracing attacks."
+            remediation: "Disable TRACE method to prevent potential vulnerabilities."
+    end if
+
+    # Server version disclosure check
+    if {check.response.headers} matches "([Xx](-|_)|)[Ss]erver:[^\n]+" and {check.response.headers} matches "([0-9]{1,2}\\.[0-9]{1,2}\\.[0-9]{1,2})" then
+        report issue:
+            severity: info
+            confidence: firm
+            detail: "Server version disclosed via {method_list} method."
+            remediation: "Avoid disclosing software versions in headers."
+    end if
+
+    # Redirection check
+    if {check.response.status_code} is "301" or {check.response.status_code} is "302" or {check.response.status_code} is "303" or {check.response.status_code} is "307" or {check.response.status_code} is "308" then
+        if {check.response.headers} matches "Location: [^\n]+" then
+            report issue:
+                severity: info
+                confidence: firm
+                detail: "Redirection observed for {method_list} method. Further investigation might reveal the exact redirection endpoint."
+                remediation: "Review the purpose and security implications of redirections."
+        end if
+    end if
