@@ -1,0 +1,28 @@
+metadata:
+    language: v1-beta
+    name: "Backup Files Exposure"
+    description: "Checks for the presence of backup files"
+    author: "Kaustubh"
+
+run for each:
+    potential_path = 
+        ".bak",
+        ".old",
+        ".swp",
+        ".backup",
+        ".tar",
+        ".gz",
+        ".zip"
+
+given request then
+    send request called check:
+        method: "GET"
+        replacing path: `{regex_replace({regex_replace({base.request.url},"^.*?\/.*?\/.*?\/","/")},"([^/]+)$", "")}{potential_path}`
+    
+    if {check.response.status_code} is "200" then
+        report issue:
+            severity: low
+            confidence: firm
+            detail: `Backup file found at {potential_path}.`
+            remediation: "Remove or restrict access to backup files."
+    end if
