@@ -1,5 +1,5 @@
 metadata:
-    language: v1-beta
+    language: v2-beta
     name: "Open Redirect Checks"
     description: "Open Redirect"
     author: "SirBugs, xelkomy"
@@ -63,7 +63,7 @@ given host then
         path: {potential_path}
 
     if "Location: https://oastify.com" in {check.response.headers} then
-        report issue:
+        report issue and continue:
             severity: low
             confidence: certain
             detail: `Open Redirect found at {potential_path}.`
