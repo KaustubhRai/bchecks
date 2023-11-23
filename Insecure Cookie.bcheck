@@ -1,12 +1,12 @@
 metadata:
-    language: v1-beta
+    language: v2-beta
     name: "Insecure Cookie Attributes"
     description: "Checks for cookies without the Secure, HttpOnly, or SameSite attributes"
     author: "Kaustubh"
 
 given response then
     if {latest.response.headers} matches "Set-Cookie:" and not ({latest.response.headers} matches "Secure") then
-        report issue:
+        report issue and continue:
             severity: medium
             confidence: firm
             detail: "Cookie set without the Secure attribute."
@@ -14,7 +14,7 @@ given response then
     end if
 
     if {latest.response.headers} matches "Set-Cookie:" and not ({latest.response.headers} matches "HttpOnly") then
-        report issue:
+        report issue and continue:
             severity: medium
             confidence: firm
             detail: "Cookie set without the HttpOnly attribute."
@@ -22,7 +22,7 @@ given response then
     end if
 
     if {latest.response.headers} matches "Set-Cookie:" and not ({latest.response.headers} matches "SameSite") then
-        report issue:
+        report issue and continue:
             severity: medium
             confidence: firm
             detail: "Cookie set without the SameSite attribute."
