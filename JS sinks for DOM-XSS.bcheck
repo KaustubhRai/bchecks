@@ -1,5 +1,5 @@
 metadata:
-    language: v1-beta
+    language: v2-beta
     name: "JS sinks for DOM-XSS (passive)"
     description: "JavaScript sink that could lead to DOM-XSS."
     author: "Lisandre.com"
@@ -8,7 +8,7 @@ metadata:
 given response then
     #https://portswigger.net/web-security/cross-site-scripting/dom-based#exploiting-dom-xss-with-different-sources-and-sinks
     if {latest.response} matches "document.write|document.writeln|document.domain|\.innerHTML|\.outerHTML|\.insertAdjacentHTML|\.onevent" then
-        report issue:
+        report issue and continue:
             severity: info
             confidence: firm
             detail: "JavaScript sink that could lead to DOM-XSS."
