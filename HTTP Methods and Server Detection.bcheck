@@ -1,5 +1,5 @@
 metadata:
-    language: v1-beta
+    language: v2-beta
     name: "HTTP Methods and Server Detection"
     description: "Checks multiple HTTP methods, detects server/proxy types, identifies enabled TRACE method, examines headers for software versions and custom values, and inspects for redirections"
     author: "Kaustubh"
@@ -25,7 +25,7 @@ given request then
 
     # Server and X-Powered-By header checks
     if {check.response.headers} matches "[Xx](-|_)[Pp]owered(-|_)[Bb]y:[^\n]+" then
-        report issue:
+        report issue and continue:
             severity: info
             confidence: firm
             detail: `{desc} via {method_list} method. Detected from HTTP X-Powered-By header.`
@@ -33,7 +33,7 @@ given request then
     end if
 
     if {check.response.headers} matches "([Xx](-|_)|)[Ss]erver:[^\n]+" then
-        report issue:
+        report issue and continue:
             severity: info
             confidence: firm
             detail: `{desc} via {method_list} method. Detected from HTTP Server header.`
@@ -42,7 +42,7 @@ given request then
 
     # Error page check
     if {check.response.status_code} is "400" and {check.response.body} matches "center>[NnAa](ginx|pache)" then
-        report issue:
+        report issue and continue:
             severity: info
             confidence: firm
             detail: `{desc} via {method_list} method. Detected from 400 status code response.`
@@ -51,7 +51,7 @@ given request then
 
     # TRACE method check
     if {method_list} is "TRACE" and {check.response.status_code} is "200" then
-        report issue:
+        report issue and continue:
             severity: medium
             confidence: firm
             detail: "TRACE method enabled on the server. Potential for Cross-Site Tracing attacks."
@@ -60,7 +60,7 @@ given request then
 
     # Server version disclosure check
     if {check.response.headers} matches "([Xx](-|_)|)[Ss]erver:[^\n]+" and {check.response.headers} matches "([0-9]{1,2}\\.[0-9]{1,2}\\.[0-9]{1,2})" then
-        report issue:
+        report issue and continue:
             severity: info
             confidence: firm
             detail: "Server version disclosed via {method_list} method."
@@ -70,7 +70,7 @@ given request then
     # Redirection check
     if {check.response.status_code} is "301" or {check.response.status_code} is "302" or {check.response.status_code} is "303" or {check.response.status_code} is "307" or {check.response.status_code} is "308" then
         if {check.response.headers} matches "Location: [^\n]+" then
-            report issue:
+            report issue and continue:
                 severity: info
                 confidence: firm
                 detail: "Redirection observed for {method_list} method. Further investigation might reveal the exact redirection endpoint."
