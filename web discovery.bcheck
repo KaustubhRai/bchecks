@@ -1,5 +1,5 @@
 metadata:
-    language: v1-beta
+    language: v2-beta
     name: "Web Content Discovery"
     description: "Checks for the presence of files"
 #https://github.com/danielmiessler/SecLists/blob/master/Discovery/Web-Content/quickhits.txt - payload list
@@ -2579,7 +2579,7 @@ given request then
         replacing path: {regex_replace ({base.response.url.path}, "(/[^/]+)$", `$1/{potential_path}`)}
     
     if ({check.response.status_code} matches "2[0-9][0-9]") or ({check.response.status_code} matches "3[0-9][0-9]") then
-    report issue:
+    report issue and continue:
         severity: low
         confidence: firm
         detail: `Potential backup or redirect found at {base.response.url.path}/{potential_path} with status code {check.response.status_code}.`
