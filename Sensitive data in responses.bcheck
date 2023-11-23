@@ -1,5 +1,5 @@
 metadata:
-    language: v1-beta
+    language: v2-beta
     name: "Sensitive data in responses"
     description: "Checks for sensitive data in all responses"
     author: "Kaustubh"
@@ -9,7 +9,7 @@ define:
 
 given response then
     if {latest.response.body} matches "{keywords}" then
-        report issue:
+        report issue and continue:
             severity: medium
             confidence: tentative
             detail: "Sensitive keyword found in a response body: '{matched[0]}'."
