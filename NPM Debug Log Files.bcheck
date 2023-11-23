@@ -1,5 +1,5 @@
 metadata:
-  language: v1-beta
+  language: v2-beta
   name: "NPM Debug Log Files"
   description: "Checks for NPM debug log files in current path as opposed to just root directory of site."
   author: "@puzzlepeaches"
@@ -19,7 +19,7 @@ given request then
   if {check.response.body} matches "verbose cli" or
     {check.response.body} matches "verbose stack" and
     {check.response.status_code} is "200" then
-    report issue:
+    report issue and continue:
       severity: low
       confidence: tentative
       detail: `NPM debug log file found at {potential_path}.`
