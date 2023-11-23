@@ -1,5 +1,5 @@
 metadata:
-    language: v1-beta
+    language: v2-beta
     name: "NoSQL Injection Detection"
     description: "Checks for NoSQL injection vulnerabilities using various payloads."
     author: "Kaustubh"
@@ -43,7 +43,7 @@ given request then
     
     # Check the response for NoSQL injection
     if {check.response.status_code} is "200" or {check.response.status_code} is "201" then
-        report issue:
+        report issue and continue:
             severity: high
             confidence: tentative
             detail: "{desc} via payload: {payload}"
