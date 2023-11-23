@@ -1,5 +1,5 @@
 metadata:
-    language: v1-beta
+    language: v2-beta
     name: "Cache Headers Check"
     description: "Checks cache headers on sensitive pages"
     author: "Kaustubh"
@@ -7,7 +7,7 @@ metadata:
 given response then
     if ({latest.response.headers} matches "Cache-Control: public") or 
        ({latest.response.headers} matches "Expires:") then
-        report issue:
+        report issue and continue:
             severity: low
             confidence: firm
             detail: "Sensitive pages might be cacheable."
