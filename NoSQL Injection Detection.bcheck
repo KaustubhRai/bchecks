@@ -3,7 +3,7 @@ metadata:
     name: "NoSQL Injection Detection"
     description: "Checks for NoSQL injection vulnerabilities using various payloads."
     author: "Kaustubh"
-
+ # works best for GET, POST/PUT where JSON body is there wont work properly. since currently bchecks treats entire JSON body as a single insertion point, so no append the payload to individual JSON fields but to entire body 
 define:
     desc = "Potential NoSQL Injection detected"
     issueRemediation = "Review and sanitize user inputs and query logic."
@@ -35,17 +35,15 @@ run for each:
         "\";return(true);var xyz='a",
         "0;return true"
 
-given request then
-    send request called check:
-        method: "GET"
-        replacing path: {payload}
-        body: "{base.request.body}{payload}"
-    
-    # Check the response for NoSQL injection
-    if {check.response.status_code} is "200" or {check.response.status_code} is "201" then
-        report issue and continue:
-            severity: high
-            confidence: tentative
-            detail: "{desc} via payload: {payload}"
-            remediation: {issueRemediation}
-    end if
+given body or query insertion point then
+  send payload called check_query:
+    replacing: "{payload}"
+
+  # Check the response for NoSQL injection in query
+  if {check_query.response.status_code} is "200" or {check_query.response.status_code} is "201" then
+      report issue and continue:
+          severity: high
+          confidence: tentative
+          detail: "{desc} via query payload: {payload}"
+          remediation: {issueRemediation}
+  end if
