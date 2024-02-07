@@ -35,9 +35,9 @@ run for each:
         "\";return(true);var xyz='a",
         "0;return true"
 
-given body or query insertion point then
-  send payload called check_query:
-    replacing: "{payload}"
+given query or body insertion point then
+  send request called check_query:
+    replacing query_string: {payload}
 
   # Check the response for NoSQL injection in query
   if {check_query.response.status_code} is "200" or {check_query.response.status_code} is "201" then
