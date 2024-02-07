@@ -44,6 +44,6 @@ given query or body insertion point then
       report issue and continue:
           severity: high
           confidence: tentative
-          detail: "{desc} via query payload: {payload}"
+          detail: `{desc} via query payload: {payload}`
           remediation: {issueRemediation}
   end if
