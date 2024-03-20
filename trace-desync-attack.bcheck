@@ -1,0 +1,19 @@
+metadata:
+    language: v2-beta
+    name: "TRACE Method Reflection Test"
+    description: "Checks if the server supports the TRACE method and reflects request headers, indicating potential for HTTP desync vulnerabilities."
+    author: "Kaustubh"
+
+given request then
+    send request called check:
+        method: "TRACE"
+        headers:
+            "Custom-Test-Header": "testvalue"
+
+    if {check.response.headers} matches "Custom-Test-Header" then
+        report issue and continue:
+            severity: medium
+            confidence: firm
+            detail: "Server supports TRACE method and reflects request headers. This behavior can be leveraged for HTTP desync attacks."
+            remediation: "Disable the TRACE method on the server or ensure that it does not reflect request headers to mitigate potential HTTP desync vulnerabilities."
+    end if
