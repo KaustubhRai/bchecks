@@ -17,3 +17,12 @@ given request then
             detail: "Server supports TRACE method and reflects request headers. This behavior can be leveraged for HTTP desync attacks."
             remediation: "Disable the TRACE method on the server or ensure that it does not reflect request headers to mitigate potential HTTP desync vulnerabilities."
     end if
+
+    if {check.response.body} matches "(Apache|Nginx|IIS|Server:[^\r\n]*)" or
+        {check.response.headers} matches "(Apache|Nginx|IIS|Server:[^\r\n]*)" then
+        report issue and continue:
+            severity: low
+            confidence: firm
+            detail: "Possible server identification from the response."
+            remediation: "Consider obfuscating server information to reduce the risk of targeted attacks."
+    end if
