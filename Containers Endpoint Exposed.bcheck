@@ -1,0 +1,49 @@
+metadata:
+    language: v2-beta
+    name: "Containers Endpoint Exposed"
+    description: "Containers endpoints that have been exposed"
+    author: "Kaustubh"
+
+run for each:
+    # you could add more values to this list to make the check repeat
+    potential_path =
+        "/Dockerrun.aws.json",
+        "/v1.24/containers/json",
+        "/v1.24/images/json",
+        "/v1.24/version",
+        "/Dockerfile",
+        "/docker-compose.yml",
+        "/api/v1/nodes",
+        "/pods",
+        "/metrics",
+        "/api/v1/namespaces/kube-system/services/kubernetes-dashboard:/proxy/",
+        "/ecs-agent/v1/metadata",
+        "/ecs-agent/v1/tasks",
+        "/computeMetadata/v1/",
+        "/computeMetadata/v1/instance",
+        "/computeMetadata/v1/project",
+        "/metadata/instance",
+        "/etc/hosts",
+        "/etc/resolv.conf",
+        "/etc/environment",
+        "/var/log/",
+        "/proc/self/cgroup",
+        "/sys/fs/cgroup",
+        "/etc/passwd",
+        "/etc/shadow",
+        "/root/.ssh/",
+        "/var/lib/docker/",
+        "/run/secrets/"
+
+given host then
+    send request called check:
+        method: "GET"
+        path: {potential_path}
+
+    if {check.response.status_code} is "200" then
+        report issue and continue:
+            severity: low
+            confidence: certain
+            detail: `Containers endpoints page exposed on {potential_path}.`
+            remediation: "Make sure to disable the page to public"
+    end if
