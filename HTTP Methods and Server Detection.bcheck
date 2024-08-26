@@ -17,7 +17,30 @@ run for each:
         "TRACE",
         "PATCH",
         "HEAD",
-        "CONNECT"
+        "CONNECT",
+        "CHECKIN",
+        "CHECKOUT",
+        "COPY",
+        "INDEX",
+        "LINK",
+        "LOCK",
+        "MKCOL",
+        "MOVE",
+        "NOEXISTE",
+        "ORDERPATCH",
+        "PROPFIND",
+        "PROPPATCH",
+        "REPORT",
+        "SEARCH",
+        "SHOWMETHOD",
+        "SPACEJUMP",
+        "TEXTSEARCH",
+        "TRACK",
+        "UNCHECKOUT",
+        "UNLINK",
+        "UNLOCK",
+        "VERSION-CONTROL",
+        "BAMBOOZLE"
 
 given request then
     send request called check:
