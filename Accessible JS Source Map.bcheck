@@ -1,0 +1,86 @@
+metadata:
+    language: v2-beta
+    name: "Accessible JS Source Map (Extended + Relative)"
+    description: "Detects exposed source map files for JavaScript across paths and relative matches."
+    author: "Kaustubh"
+    tags: "passive", "javascript", "source map", "informative"
+
+run for each:
+    replacing_path =
+        "/main.js.map",
+        "/bundle.js.map",
+        "/app.js.map",
+        "/vendor.js.map",
+        "/polyfills.js.map",
+        "/runtime.js.map",
+        "/scripts.js.map",
+        "/index.js.map",
+        "/build.js.map",
+        "/common.js.map",
+        "/core.js.map",
+        "/webpack.js.map",
+        "/angular.js.map",
+        "/react.js.map",
+        "/vue.js.map",
+        "/jquery.js.map",
+        "/bootstrap.js.map",
+        "/app.min.js.map",
+        "/bundle.min.js.map",
+        "/main.min.js.map",
+        "/scripts.min.js.map",
+        "/app.bundle.js.map",
+        "/vendor.bundle.js.map",
+        "/site.js.map",
+        "/theme.js.map",
+        "/base.js.map",
+        "/admin.js.map",
+        "/dashboard.js.map",
+        "/init.js.map",
+        "/login.js.map",
+        "/auth.js.map",
+        "/api.js.map",
+        "/client.js.map"
+
+given path then
+    # 1. Brute-force static .map paths
+    send request called map_check:
+        replacing method: "GET"
+        replacing path: {replacing_path}
+
+    if {map_check.response.status_code} is "200" and
+        {map_check.response.headers} matches "application/json" then
+        report issue and continue:
+            name: "Accessible JavaScript Source Map File"
+            severity: info
+            confidence: certain
+            remediation: "Restrict access to source map files in production environments."
+            detail: "The source map file `{replacing_path}` is publicly accessible and may reveal unobfuscated source code."
+    end if
+
+    # 2. Relative .js → .js.map logic (once per request)
+    send request called js_map_check:
+        replacing method: "GET"
+        replacing path: `{base.request.url.path}.map`
+
+    if {js_map_check.response.status_code} is "200" and
+        {js_map_check.response.headers} matches "application/json" then
+        report issue and continue:
+            name: "Accessible Relative JavaScript Source Map"
+            severity: info
+            confidence: certain
+            remediation: "Remove or protect the source map file `{latest.request.url.path}.map` from public access."
+            detail: "A JavaScript file was found at `{latest.request.url.path}`, and its corresponding source map is publicly accessible."
+    end if
+
+    # 3. Passive sourceMappingURL detection
+    if {latest.response.headers} matches "application/javascript" or
+        {latest.response.headers} matches "text/javascript" then
+        if {latest.response.body} matches "sourceMappingURL=" then
+            report issue and continue:
+                name: "JavaScript Source Map Reference Detected"
+                severity: info
+                confidence: firm
+                remediation: "Avoid exposing sourceMappingURL references in production environments."
+                detail: "The JavaScript response contains a sourceMappingURL reference, which may point to a publicly exposed source map file."
+        end if
+    end if
