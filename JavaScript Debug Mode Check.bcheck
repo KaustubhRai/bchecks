@@ -7,19 +7,19 @@ metadata:
 
 given request then
   # Check if the request is for a JavaScript file
-  if {base.request.headers} matches "application/javascript" or {base.request.headers} matches "text/javascript" then
+  if {base.response.headers} matches "application/javascript" or {base.response.headers} matches "text/javascript" then
     # Send a new request with ?_debug=1 appended
     send request called debug_request:
       method: "GET"
       appending queries:
         "_debug=1"
 
-    # Compare the response bodies
-    if {debug_request.response.body} differs from {base.response.body} then
-        report issue and continue:
-          severity: medium
-          confidence: firm
-          detail: "Potential sensitive information exposure in debug mode for {base.request.url}. The response changes when ?_debug=1 is appended."
-          remediation: "Review the JavaScript file for exposed debugging information or sensitive comments."
+    # Compare the full responses
+    if {debug_request.response} differs from {base.response} then
+      report issue and continue:
+        severity: medium
+        confidence: firm
+        detail: "Potential sensitive information exposure in debug mode for {base.request.url}. The response changes when ?_debug=1 is appended."
+        remediation: "Review the JavaScript file for exposed debugging information or sensitive comments."
     end if
   end if
