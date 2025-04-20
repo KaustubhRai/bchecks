@@ -8,7 +8,7 @@ define:
     desc = "The service that the application uses was detected"
 
 run for each:
-    method_list = 
+    method_list =
         "GET",
         "POST",
         "PUT",
@@ -17,7 +17,6 @@ run for each:
         "TRACE",
         "PATCH",
         "HEAD",
-        "CONNECT",
         "CHECKIN",
         "CHECKOUT",
         "COPY",
@@ -40,7 +39,8 @@ run for each:
         "UNLINK",
         "UNLOCK",
         "VERSION-CONTROL",
-        "BAMBOOZLE"
+        "BAMBOOZLE",
+        "CONNECT"
 
 given request then
     send request called check:
@@ -64,7 +64,8 @@ given request then
     end if
 
     # Error page check
-    if {check.response.status_code} is "400" and {check.response.body} matches "center>[NnAa](ginx|pache)" then
+    if {check.response.status_code} is "400" and
+        {check.response.body} matches "center>[NnAa](ginx|pache)" then
         report issue and continue:
             severity: info
             confidence: firm
@@ -73,7 +74,8 @@ given request then
     end if
 
     # TRACE method check
-    if {method_list} is "TRACE" and {check.response.status_code} is "200" then
+    if {method_list} is "TRACE" and
+        {check.response.status_code} is "200" then
         report issue and continue:
             severity: medium
             confidence: firm
@@ -82,7 +84,8 @@ given request then
     end if
 
     # Server version disclosure check
-    if {check.response.headers} matches "([Xx](-|_)|)[Ss]erver:[^\n]+" and {check.response.headers} matches "([0-9]{1,2}\\.[0-9]{1,2}\\.[0-9]{1,2})" then
+    if {check.response.headers} matches "([Xx](-|_)|)[Ss]erver:[^\n]+" and
+        {check.response.headers} matches "([0-9]{1,2}\\.[0-9]{1,2}\\.[0-9]{1,2})" then
         report issue and continue:
             severity: info
             confidence: firm
@@ -91,7 +94,11 @@ given request then
     end if
 
     # Redirection check
-    if {check.response.status_code} is "301" or {check.response.status_code} is "302" or {check.response.status_code} is "303" or {check.response.status_code} is "307" or {check.response.status_code} is "308" then
+    if {check.response.status_code} is "301" or
+        {check.response.status_code} is "302" or
+        {check.response.status_code} is "303" or
+        {check.response.status_code} is "307" or
+        {check.response.status_code} is "308" then
         if {check.response.headers} matches "Location: [^\n]+" then
             report issue and continue:
                 severity: info
