@@ -1,71 +1,76 @@
 metadata:
     language: v2-beta
-    name: "Open Redirect Checks"
+    name: "Open Redirect Checks with Collaborator"
     description: "Open Redirect"
-    author: "SirBugs, xelkomy"
+
+define:
+    # Generate a new Collaborator address
+    collaborator_address = `http://{generate_collaborator_address()}/`
 
 run for each:
-    # you could add more values to this list to make the check repeat
+    # List of potential paths with Collaborator address
     potential_path =
-       "/https://oastify.com/",
-       "//https://oastify.com//",
-       "/?targetOrigin=https://oastify.com/",
-       "/?fallback=https://oastify.com/",
-       "/?query=https://oastify.com/",
-       "/?redirection_url=https://oastify.com/",
-       "/?next=https://oastify.com/",
-       "/?ref_url=https://oastify.com/",
-       "/?state=https://oastify.com/",
-       "/?1=https://oastify.com/",
-       "/?redirect_uri=https://oastify.com/",
-       "/?forum_reg=https://oastify.com/",
-       "/?return_to=https://oastify.com/",
-       "/?redirect_url=https://oastify.com/",
-       "/?return_url=https://oastify.com/",
-       "/?host=https://oastify.com/",
-       "/?url=https://oastify.com/",
-       "/?redirectto=https://oastify.com/",
-       "/?return=https://oastify.com/",
-       "/?prejoin_data=https://oastify.com/",
-       "/?callback_url=https://oastify.com/",
-       "/?path=https://oastify.com/",
-       "/?authorize_callback=https://oastify.com/",
-       "/?email=https://oastify.com/",
-       "/?origin=https://oastify.com/",
-       "/?continue=https://oastify.com/",
-       "/?domain_name=https://oastify.com/",
-       "/?redir=https://oastify.com/",
-       "/?wp_http_referer=https://oastify.com/",
-       "/?endpoint=https://oastify.com/",
-       "/?shop=https://oastify.com/",
-       "/?qpt_question_url=https://oastify.com/",
-       "/?checkout_url=https://oastify.com/",
-       "/?ref_url=https://oastify.com/",
-       "/?redirect_to=https://oastify.com/",
-       "/?succUrl=https://oastify.com/",
-       "/?file=https://oastify.com/",
-       "/?link=https://oastify.com/",
-       "/?referrer=https://oastify.com/",
-       "/?recipient=https://oastify.com/",
-       "/?redirect=https://oastify.com/",
-       "/?u=https://oastify.com/",
-       "/?hostname=https://oastify.com/",
-       "/?returnTo=https://oastify.com/",
-       "/?return_path=https://oastify.com/",
-       "/?image=https://oastify.com/",
-       "/?requestTokenAndRedirect=https://oastify.com/",
-       "/?retURL=https://oastify.com/",
-       "/?next_url=https://oastify.com/"
+        "/{collaborator_address}",
+        "//{collaborator_address}//",
+        "/?targetOrigin={collaborator_address}",
+        "/?fallback={collaborator_address}",
+        "/?query={collaborator_address}",
+        "/?redirection_url={collaborator_address}",
+        "/?next={collaborator_address}",
+        "/?ref_url={collaborator_address}",
+        "/?state={collaborator_address}",
+        "/?1={collaborator_address}",
+        "/?redirect_uri={collaborator_address}",
+        "/?forum_reg={collaborator_address}",
+        "/?return_to={collaborator_address}",
+        "/?redirect_url={collaborator_address}",
+        "/?return_url={collaborator_address}",
+        "/?host={collaborator_address}",
+        "/?url={collaborator_address}",
+        "/?redirectto={collaborator_address}",
+        "/?return={collaborator_address}",
+        "/?prejoin_data={collaborator_address}",
+        "/?callback_url={collaborator_address}",
+        "/?path={collaborator_address}",
+        "/?authorize_callback={collaborator_address}",
+        "/?email={collaborator_address}",
+        "/?origin={collaborator_address}",
+        "/?continue={collaborator_address}",
+        "/?domain_name={collaborator_address}",
+        "/?redir={collaborator_address}",
+        "/?wp_http_referer={collaborator_address}",
+        "/?endpoint={collaborator_address}",
+        "/?shop={collaborator_address}",
+        "/?qpt_question_url={collaborator_address}",
+        "/?checkout_url={collaborator_address}",
+        "/?ref_url={collaborator_address}",
+        "/?redirect_to={collaborator_address}",
+        "/?succUrl={collaborator_address}",
+        "/?file={collaborator_address}",
+        "/?link={collaborator_address}",
+        "/?referrer={collaborator_address}",
+        "/?recipient={collaborator_address}",
+        "/?redirect={collaborator_address}",
+        "/?u={collaborator_address}",
+        "/?hostname={collaborator_address}",
+        "/?returnTo={collaborator_address}",
+        "/?return_path={collaborator_address}",
+        "/?image={collaborator_address}",
+        "/?requestTokenAndRedirect={collaborator_address}",
+        "/?retURL={collaborator_address}",
+        "/?next_url={collaborator_address}",
+        "/?redirectURI=javascript:alert("
 
 given host then
     send request called check:
         method: "GET"
         path: {potential_path}
 
-    if "Location: https://oastify.com" in {check.response.headers} then
+    # Check for any interactions with the Collaborator
+    if any interactions then
         report issue and continue:
-            severity: low
+            severity: high
             confidence: certain
-            detail: `Open Redirect found at {potential_path}.`
+            detail: `Open Redirect confirmed by interaction at {potential_path}.`
             remediation: "Ensure your website is not redirecting the users outside it without whitelist."
     end if
