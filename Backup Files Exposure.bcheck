@@ -5,20 +5,22 @@ metadata:
     author: "Kaustubh"
 
 run for each:
-    potential_path = 
+    potential_path =
         ".bak",
         ".old",
         ".swp",
         ".backup",
         ".tar",
         ".gz",
-        ".zip"
+        ".zip",
+        "README.md",
+        ".git"
 
 given request then
     send request called check:
         method: "GET"
-        replacing path: `{regex_replace({regex_replace({base.request.url},"^.*?\/.*?\/.*?\/","/")},"([^/]+)$", "")}{potential_path}`
-    
+        replacing path: `{regex_replace({regex_replace({base.request.url}, "^.*?\/.*?\/.*?\/", "/")}, "([^/]+)$", "")}{potential_path}`
+
     if {check.response.status_code} is "200" then
         report issue and continue:
             severity: low
