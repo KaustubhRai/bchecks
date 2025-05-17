@@ -1,0 +1,23 @@
+/**
+name: Filter out Unwanted requests from other domains that gets captured from background
+function: VIEW_FILTER
+location: PROXY_HTTP_HISTORY
+source: |+
+   //Array of URLs to filter out from proxy history
+**/
+  var urlsToFilter = new String[] { "githubassets.com", "github.com", "bitwarden.net", "githubusercontent.com", "google.com","gstatic.com","mozilla.com","googleapis.com","pki.goog","postman.com","cookiepro.com","cloudflare.com","commandbar.com","onetrust.com","jsdelivr.net","pages.dev","recaptcha.net","pusher.com","atlassian.net","atlassian.com", "segment.com", "googletagmanager.com", "appfire.app", "sentry.io", "facebook.net", "harvestapp.com", "facebook.com", "bugsnag.com", "bitwarden.com" };
+  
+  var request = requestResponse.request();
+  if (request != null) {
+      var url = request.url();
+      if (url != null) {
+          // Check if the URL matches any in the array
+          for (var filteredUrl : urlsToFilter) {
+              if (url.contains(filteredUrl)) {
+                  return false; // Exclude this request/response pair from the history
+              }
+          }
+      }
+  }
+  
+  return true; // Include all other request/response pairs
