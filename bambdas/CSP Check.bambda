@@ -1,0 +1,587 @@
+/**
+   * Evaluates Content-Security-Policy headers from an HTTP response.
+   * Function - Custom Action
+	* Location - Repeater
+	* Author - Kaustubh
+*/
+
+  // --- Container for static helper methods and classes ---
+  class CspEvaluationHelpers {
+
+    enum Severity {  // Removed 'static' modifier
+        HIGH("error"),
+        MEDIUM("warning"),
+        LOW("info"),
+        SYNTAX("syntax"),
+        NONE("check");
+        
+        private final String label;
+        
+        Severity(String label) {
+            this.label = label;
+        }
+        
+        public String getLabel() {
+            return label;
+        }
+    }
+
+    // --- Helper class to store CSP analysis findings ---
+    static class CspFinding {
+      Severity severity;
+      String type; 
+      String directive; 
+      String sourceValue; 
+      String message;
+      String recommendation;
+
+      CspFinding(String type, Severity severity, String directive, String sourceValue, String message, String recommendation) {
+        this.type = type;
+        this.severity = severity;
+        this.directive = directive;
+        this.sourceValue = sourceValue;
+        this.message = message;
+        this.recommendation = recommendation;
+      }
+
+      public String getMessageAndRecommendation() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(message);
+        if (recommendation != null && !recommendation.isEmpty()) {
+          sb.append(" Recommendation: ").append(recommendation);
+        }
+        return sb.toString();
+      }
+    }
+
+    static java.util.Map<String, java.util.List<String>> parseCsp(String cspValue, burp.api.montoya.logging.Logging logging) {
+      java.util.Map<String, java.util.List<String>> policy = new java.util.LinkedHashMap<>(); 
+      if (cspValue == null || cspValue.trim().isEmpty()) return policy;
+      String[] directives = cspValue.split(";");
+      for (String directiveStr : directives) {
+        String d = directiveStr.trim();
+        if (d.isEmpty()) continue;
+        String[] parts = d.split("\\s+", 2);
+        String directiveName = parts[0].toLowerCase();
+        java.util.List<String> sources = new java.util.ArrayList<>();
+        if (parts.length > 1 && parts[1] != null && !parts[1].trim().isEmpty()) {
+          for (String sv : parts[1].trim().split("\\s+")) {
+            if (!sv.trim().isEmpty()) sources.add(sv.trim());
+          }
+        }
+        if (policy.containsKey(directiveName)) {
+          java.util.List<String> existingSources = policy.get(directiveName);
+          existingSources.addAll(sources);
+          policy.put(directiveName, new java.util.ArrayList<>(new java.util.HashSet<>(existingSources)));
+        } else {
+          policy.put(directiveName, sources);
+        }
+      }
+      return policy;
+    }
+
+    static boolean matchesDomainPattern(String actualHost, String pattern) {
+      if (actualHost == null || pattern == null) return false;
+      String normalizedHost = actualHost.toLowerCase();
+      String normalizedPattern = pattern.toLowerCase();
+      if (normalizedPattern.startsWith("*.")) {
+        String basePattern = normalizedPattern.substring(1); 
+        return normalizedHost.endsWith(basePattern) && normalizedHost.length() > basePattern.length() && normalizedHost.charAt(normalizedHost.length() - basePattern.length() -1) != '.';
+      }
+      return normalizedHost.equals(normalizedPattern);
+    }
+    
+    private static String getTypePrefix(String type) {
+        switch (type.toLowerCase()) {
+            case "error":   return "[ERROR]   ";
+            case "warning": return "[WARNING] ";
+            case "info":    return "[INFO]    ";
+            case "check":   return "[CHECK]   ";
+            default:        return "[" + type.toUpperCase() + "] ";
+        }
+    }
+
+    static void checkMissingDirectives(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        // Check for essential security directives
+        if (!parsedCsp.containsKey("default-src") && !parsedCsp.containsKey("script-src")) {
+            findings.add(new CspFinding("MISSING_DIRECTIVE", Severity.HIGH, null, null,
+                "Missing 'script-src' or 'default-src' allows script execution from any source.",
+                "Add 'script-src' or 'default-src' directive."));
+        }
+        
+        if (!parsedCsp.containsKey("default-src") && !parsedCsp.containsKey("object-src")) {
+            findings.add(new CspFinding("MISSING_DIRECTIVE", Severity.HIGH, null, null,
+                "Missing 'object-src' or 'default-src' allows plugins from any source.",
+                "Add 'object-src' directive or set it to 'none'."));
+        }
+        
+        if (!parsedCsp.containsKey("default-src") && !parsedCsp.containsKey("base-uri")) {
+            findings.add(new CspFinding("MISSING_DIRECTIVE", Severity.MEDIUM, null, null,
+                "Missing 'base-uri' allows injection of base tags. They can be used to set the base URL for all relative URLs.",
+                "Add 'base-uri' directive."));
+        }
+        
+        if (!parsedCsp.containsKey("frame-ancestors")) {
+            findings.add(new CspFinding("MISSING_DIRECTIVE", Severity.MEDIUM, null, null,
+                "Missing 'frame-ancestors' directive allows this page to be framed by potentially malicious sites.",
+                "Add 'frame-ancestors' directive."));
+        }
+    }
+
+    static void checkWildcardSources(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        final java.util.Set<String> SENSITIVE_DIRECTIVES = new java.util.HashSet<>(
+            java.util.Arrays.asList("script-src", "style-src", "object-src", "base-uri"));
+            
+        for (String directive : SENSITIVE_DIRECTIVES) {
+            if (parsedCsp.containsKey(directive) && 
+                parsedCsp.get(directive).contains("*")) {
+                findings.add(new CspFinding("WILDCARD_SOURCE", Severity.HIGH, directive, "*",
+                    "Using wildcard in " + directive + " effectively bypasses CSP protections.",
+                    "Specify allowed sources explicitly instead of using wildcard."));
+            }
+        }
+        
+        // Check for wildcards in connect-src which can also be risky
+        if (parsedCsp.containsKey("connect-src") && 
+            parsedCsp.get("connect-src").contains("*")) {
+            findings.add(new CspFinding("WILDCARD_SOURCE", Severity.MEDIUM, "connect-src", "*",
+                "Using wildcard in connect-src allows XHR, WebSocket or EventSource to any external domain.",
+                "Specify allowed connections explicitly instead of using wildcard."));
+        }
+    }
+
+    static void checkSrcHttp(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        for (java.util.Map.Entry<String, java.util.List<String>> entry : parsedCsp.entrySet()) {
+            String directive = entry.getKey();
+            java.util.List<String> values = entry.getValue();
+            
+            for (String value : values) {
+                String description = directive.equals("report-uri") ?
+                    "Use HTTPS to send violation reports securely." :
+                    "Allow only resources downloaded over HTTPS.";
+                    
+                if (value.startsWith("http://")) {
+                    findings.add(new CspFinding("SRC_HTTP", Severity.MEDIUM, directive, value,
+                        description, "Replace HTTP with HTTPS where possible."));
+                }
+            }
+        }
+    }
+
+    static void checkIpSource(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        for (java.util.Map.Entry<String, java.util.List<String>> entry : parsedCsp.entrySet()) {
+            String directive = entry.getKey();
+            java.util.List<String> sources = entry.getValue();
+            
+            for (String source : sources) {
+                // Skip keyword sources that start with a single quote
+                if (source.startsWith("'")) continue;
+                
+                // Extract hostname
+                String host = source;
+                if (source.contains("://")) {
+                    host = source.split("://")[1];
+                }
+                if (host.contains("/")) {
+                    host = host.split("/")[0];
+                }
+                if (host.contains(":")) {
+                    host = host.split(":")[0];
+                }
+                
+                // Check for IP address pattern
+                if (looksLikeIpAddress(host)) {
+                    if (host.equals("127.0.0.1")) {
+                        findings.add(new CspFinding("IP_SOURCE", Severity.LOW, directive, source,
+                            directive + " directive allows localhost as source. This should be removed in production environments.",
+                            "Remove localhost references in production."));
+                    } else {
+                        findings.add(new CspFinding("IP_SOURCE", Severity.LOW, directive, source,
+                            directive + " directive has an IP address as source: " + host + " (may be ignored by some browsers).",
+                            "Use hostname instead of IP address."));
+                    }
+                }
+            }
+        }
+    }
+
+    static boolean looksLikeIpAddress(String host) {
+        // Simple check for IPv4 pattern
+        String[] parts = host.split("\\.");
+        if (parts.length != 4) return false;
+        
+        for (String part : parts) {
+            try {
+                int num = Integer.parseInt(part);
+                if (num < 0 || num > 255) return false;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
+    static void checkUnsafeDirectives(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        // Check for unsafe-eval
+        if (parsedCsp.containsKey("script-src") && 
+            parsedCsp.get("script-src").contains("'unsafe-eval'")) {
+            findings.add(new CspFinding("UNSAFE_EVAL", Severity.HIGH, "script-src", "'unsafe-eval'",
+                "unsafe-eval allows the execution of code from strings, which significantly weakens CSP protection.",
+                "Remove 'unsafe-eval' and refactor code to avoid use of eval(), setTimeout(string), setInterval(string), and new Function()."));
+        }
+        
+        // Check for unsafe-inline in script-src without nonces or hashes
+        if (parsedCsp.containsKey("script-src")) {
+            java.util.List<String> values = parsedCsp.get("script-src");
+            boolean hasNonceOrHash = values.stream().anyMatch(s -> 
+                s.startsWith("'nonce-") || s.startsWith("'sha256-") || 
+                s.startsWith("'sha384-") || s.startsWith("'sha512-"));
+                
+            if (values.contains("'unsafe-inline'") && !hasNonceOrHash && !values.contains("'strict-dynamic'")) {
+                findings.add(new CspFinding("UNSAFE_INLINE", Severity.HIGH, "script-src", "'unsafe-inline'",
+                    "unsafe-inline allows the execution of arbitrary scripts, effectively bypassing CSP protections.",
+                    "Remove 'unsafe-inline' and use nonces or hashes for specific scripts."));
+            }
+        }
+    }
+
+    static void checkNonceLength(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        for (java.util.Map.Entry<String, java.util.List<String>> entry : parsedCsp.entrySet()) {
+            String directive = entry.getKey();
+            java.util.List<String> sources = entry.getValue();
+            
+            for (String source : sources) {
+                if (source.startsWith("'nonce-")) {
+                    String nonce = source.substring(7, source.length() - 1);
+                    if (nonce.length() < 8) {
+                        findings.add(new CspFinding("NONCE_LENGTH", Severity.MEDIUM, directive, source, 
+                            "Nonces should be at least 8 characters long.", 
+                            "Use a stronger nonce."));
+                    }
+                    // Check for non-base64 characters
+                    if (!nonce.matches("^[A-Za-z0-9+/=]+$")) {
+                        findings.add(new CspFinding("INVALID_NONCE", Severity.LOW, directive, source, 
+                            "Nonce contains characters outside the base64 character set.", 
+                            "Use only valid base64 characters for nonces."));
+                    }
+                }
+            }
+        }
+    }
+
+    static void checkPlainUrlSchemes(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        final java.util.Set<String> SENSITIVE_DIRECTIVES = new java.util.HashSet<>(
+            java.util.Arrays.asList("script-src", "object-src", "base-uri"));
+            
+        for (java.util.Map.Entry<String, java.util.List<String>> entry : parsedCsp.entrySet()) {
+            String directive = entry.getKey();
+            java.util.List<String> sources = entry.getValue();
+            
+            if (SENSITIVE_DIRECTIVES.contains(directive)) {
+                for (String source : sources) {
+                    if (source.equals("http:") || source.equals("https:") || 
+                        source.equals("data:") || source.equals("blob:")) {
+                        findings.add(new CspFinding("PLAIN_URL_SCHEME", Severity.HIGH, directive, source, 
+                            source + " URI in " + directive + " allows the execution of unsafe scripts.",
+                            "Avoid plain URL schemes in sensitive directives."));
+                    }
+                }
+            }
+        }
+    }
+    
+    static void checkStrictDynamic(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        if (parsedCsp.containsKey("script-src")) {
+            java.util.List<String> values = parsedCsp.get("script-src");
+            boolean hasSchemeOrHost = values.stream().anyMatch(v -> !v.startsWith("'"));
+            
+            if (hasSchemeOrHost && !values.contains("'strict-dynamic'")) {
+                findings.add(new CspFinding("STRICT_DYNAMIC", Severity.LOW, "script-src", null, 
+                    "Host allowlists can frequently be bypassed. Consider using 'strict-dynamic' in combination with CSP nonces or hashes.",
+                    "Add 'strict-dynamic' to script-src along with nonces or hashes."));
+            }
+        }
+    }
+
+    static void checkUnsafeInlineFallback(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        if (parsedCsp.containsKey("script-src")) {
+            java.util.List<String> values = parsedCsp.get("script-src");
+            boolean hasNonceOrHash = values.stream().anyMatch(s -> 
+                s.startsWith("'nonce-") || s.startsWith("'sha256-") || 
+                s.startsWith("'sha384-") || s.startsWith("'sha512-"));
+                
+            if (hasNonceOrHash && !values.contains("'unsafe-inline'")) {
+                findings.add(new CspFinding("UNSAFE_INLINE_FALLBACK", Severity.LOW, "script-src", null, 
+                    "Consider adding 'unsafe-inline' (ignored by browsers supporting nonces/hashes) to be backward compatible with older browsers.",
+                    "Add 'unsafe-inline' for backward compatibility."));
+            }
+        }
+    }
+
+    static void checkReportingConfiguration(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        boolean hasReportUri = parsedCsp.containsKey("report-uri");
+        boolean hasReportTo = parsedCsp.containsKey("report-to");
+        
+        if (!hasReportUri && !hasReportTo) {
+            findings.add(new CspFinding("MISSING_REPORTING", Severity.LOW, null, null,
+                "No CSP violation reporting configured. This makes it harder to detect and fix potential violations.",
+                "Add 'report-uri' or 'report-to' directive for CSP violation reporting."));
+        }
+        
+        if (hasReportUri && !hasReportTo) {
+            findings.add(new CspFinding("DEPRECATED_DIRECTIVE", Severity.LOW, "report-uri", null,
+                "report-uri is deprecated in CSP Level 3. It still works in modern browsers but support may be removed.",
+                "Consider adding report-to alongside report-uri for forward compatibility."));
+        }
+    }
+
+    static void checkDeprecatedDirectives(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        // Check for deprecated directives
+        if (parsedCsp.containsKey("reflected-xss")) {
+            findings.add(new CspFinding("DEPRECATED_DIRECTIVE", Severity.LOW, "reflected-xss", null,
+                "reflected-xss directive is deprecated in CSP Level 2 and not broadly supported.",
+                "Use X-XSS-Protection header instead."));
+        }
+        
+        if (parsedCsp.containsKey("referrer")) {
+            findings.add(new CspFinding("DEPRECATED_DIRECTIVE", Severity.LOW, "referrer", null,
+                "referrer directive is deprecated. Browsers no longer support it.",
+                "Use Referrer-Policy header instead."));
+        }
+    }
+
+    static void checkTrustedTypes(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings) {
+        // Check for Trusted Types - security feature for DOM XSS prevention
+        if (!parsedCsp.containsKey("require-trusted-types-for")) {
+            findings.add(new CspFinding("TRUSTED_TYPES", Severity.LOW, null, null,
+                "Consider implementing Trusted Types policy for enhanced protection against DOM XSS.",
+                "Add 'require-trusted-types-for' directive to enforce Trusted Types in modern browsers."));
+        }
+    }
+
+    static void checkScriptSrcHostWhitelists(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings, java.util.Set<String> KNOWN_JSONP_HOSTS) {
+        if (parsedCsp.containsKey("script-src")) {
+            java.util.List<String> sources = parsedCsp.get("script-src");
+            
+            for (String source : sources) {
+                // Skip keyword sources that start with a single quote
+                if (source.startsWith("'")) continue;
+                
+                // Check for JSONP endpoints
+                for (String jsonpHost : KNOWN_JSONP_HOSTS) {
+                    if (matchesDomainPattern(source, jsonpHost)) {
+                        findings.add(new CspFinding("JSONP_ENDPOINT", Severity.MEDIUM, "script-src", source,
+                            "Domain hosts JSONP endpoints which allow for bypassing CSP protections.",
+                            "If possible, limit use to specific paths or remove this domain from script-src."));
+                    }
+                }
+                
+                // Look for domains that might be dangerous
+                if (source.contains("cdn") || source.contains("storage") || source.contains("api")) {
+                    findings.add(new CspFinding("EXTERNAL_SERVICE", Severity.LOW, "script-src", source,
+                        "External service domain might allow CSP bypass if it hosts user content.",
+                        "Verify that this domain enforces proper content security controls."));
+                }
+            }
+        }
+    }
+
+    static void checkScriptSrcAngular(java.util.Map<String, java.util.List<String>> parsedCsp, java.util.List<CspFinding> findings, java.util.Set<String> KNOWN_ANGULAR_HOSTS) {
+        if (parsedCsp.containsKey("script-src")) {
+            java.util.List<String> sources = parsedCsp.get("script-src");
+            
+            for (String source : sources) {
+                // Skip keyword sources that start with a single quote
+                if (source.startsWith("'")) continue;
+                
+                // Check for Angular hosts
+                for (String angularHost : KNOWN_ANGULAR_HOSTS) {
+                    if (matchesDomainPattern(source, angularHost)) {
+                        findings.add(new CspFinding("ANGULAR_LIBRARY", Severity.HIGH, "script-src", source,
+                            "Domain hosts Angular libraries which allow for bypassing CSP protections when 'unsafe-eval' is not present.",
+                            "Consider adding 'unsafe-eval' if you must use this domain, or remove it if possible."));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    enum CspVersion {  // Removed 'static' modifier
+        CSP1, CSP2, CSP3
+    }
+
+    static java.util.Map<String, java.util.List<String>> getEffectiveCsp(java.util.Map<String, java.util.List<String>> parsedCsp, CspVersion version) {
+        java.util.Map<String, java.util.List<String>> effectiveCsp = new java.util.LinkedHashMap<>(parsedCsp);
+        
+        // Apply version-specific rules
+        // For CSP2+: nonces and hashes make unsafe-inline ineffective in script-src
+        if (version != CspVersion.CSP1 && effectiveCsp.containsKey("script-src")) {
+            java.util.List<String> scriptSrc = effectiveCsp.get("script-src");
+            boolean hasNonceOrHash = scriptSrc.stream().anyMatch(s -> 
+                s.startsWith("'nonce-") || s.startsWith("'sha256-") || 
+                s.startsWith("'sha384-") || s.startsWith("'sha512-"));
+                
+            if (hasNonceOrHash && scriptSrc.contains("'unsafe-inline'")) {
+                // In CSP2+, unsafe-inline is ignored if a nonce or hash is present
+                java.util.List<String> newScriptSrc = new java.util.ArrayList<>(scriptSrc);
+                newScriptSrc.remove("'unsafe-inline'");
+                effectiveCsp.put("script-src", newScriptSrc);
+            }
+            
+            // For CSP3: strict-dynamic makes allowlists ineffective
+            if (version == CspVersion.CSP3 && scriptSrc.contains("'strict-dynamic'") && hasNonceOrHash) {
+                // In CSP3, URL allowlists are ignored if strict-dynamic and nonce/hash are present
+                java.util.List<String> newScriptSrc = new java.util.ArrayList<>();
+                for (String value : scriptSrc) {
+                    // Keep only keyword sources (starting with ') and remove URL allowlists
+                    if (value.startsWith("'") || 
+                        value.equals("'self'") || 
+                        value.equals("'unsafe-inline'") ||
+                        value.equals("'strict-dynamic'")) {
+                        newScriptSrc.add(value);
+                    }
+                }
+                effectiveCsp.put("script-src", newScriptSrc);
+            }
+        }
+        
+        // Handle CSP3-specific directives
+        if (version != CspVersion.CSP3) {
+            effectiveCsp.remove("report-to");
+            effectiveCsp.remove("worker-src");
+            effectiveCsp.remove("manifest-src");
+            effectiveCsp.remove("trusted-types");
+            effectiveCsp.remove("require-trusted-types-for");
+            effectiveCsp.remove("script-src-attr");
+            effectiveCsp.remove("script-src-elem");
+            effectiveCsp.remove("style-src-attr");
+            effectiveCsp.remove("style-src-elem");
+        }
+        
+        return effectiveCsp;
+    }
+
+    public static void evaluateCspPolicy(burp.api.montoya.http.message.HttpRequestResponse requestResponse, burp.api.montoya.logging.Logging logging) {
+    try {
+        burp.api.montoya.http.message.responses.HttpResponse response = requestResponse.response();
+        if (response == null) { logging.logToOutput("No response available."); return; }
+
+        java.util.List<String> cspHeaderValues = new java.util.ArrayList<>();
+        boolean reportOnlyHeaderFound = false;
+        for (burp.api.montoya.http.message.HttpHeader header : response.headers()) {
+          if (header.name().equalsIgnoreCase("Content-Security-Policy")) {
+            cspHeaderValues.add(header.value());
+          }
+          if (header.name().equalsIgnoreCase("Content-Security-Policy-Report-Only")) {
+            if (!reportOnlyHeaderFound) {
+                logging.logToOutput("[INFO] Found Content-Security-Policy-Report-Only header(s). Analysis will follow.");
+                reportOnlyHeaderFound = true;
+            }
+            cspHeaderValues.add(header.value());
+          }
+        }
+        if (cspHeaderValues.isEmpty()) { logging.logToOutput("[INFO] No Content-Security-Policy or Content-Security-Policy-Report-Only headers found."); return; }
+
+        final java.util.Set<String> KNOWN_JSONP_HOSTS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "*.google-analytics.com", "www.google-analytics.com", 
+            "*.googletagmanager.com", "googletagmanager.com", "www.googletagmanager.com",
+            "www.google.com", "ajax.googleapis.com", "apis.google.com", "plus.google.com",
+            "www.googleapis.com", "www.gstatic.com", "ssl.google-analytics.com",
+            "connect.facebook.net", "graph.facebook.com", "api.facebook.com",
+            "cdnjs.cloudflare.com", "cdn.jsdelivr.net", "code.jquery.com",
+            "yandex.ru", "yastatic.net", "*.yandex.ru"
+        ));
+        final java.util.Set<String> KNOWN_ANGULAR_HOSTS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "cdnjs.cloudflare.com", "ajax.googleapis.com", "code.angularjs.org", 
+            "cdn.jsdelivr.net", "ajax.aspnetcdn.com"
+        ));
+        final java.util.Set<String> SCRIPT_KEYWORDS = new java.util.HashSet<>(java.util.Arrays.asList("'self'", "'unsafe-inline'", "'unsafe-eval'", "'strict-dynamic'", "'report-sample'", "'wasm-unsafe-eval'", "'unsafe-hashes'"));
+
+        for (String cspValue : cspHeaderValues) {
+          logging.logToOutput("\n--- Analyzing CSP policy (" + (cspValue.length() > 70 ? cspValue.substring(0, 67) + "..." : cspValue) + ") ---");
+          
+          java.util.List<CspFinding> allFindings = new java.util.ArrayList<>();
+          java.util.Map<String, java.util.List<String>> parsedCsp = parseCsp(cspValue, logging);
+          
+          // Output the detected directives
+          logging.logToOutput("Detected " + parsedCsp.size() + " directives: " + String.join(", ", parsedCsp.keySet()));
+          
+          // Run all the checks
+          checkMissingDirectives(parsedCsp, allFindings);
+          checkWildcardSources(parsedCsp, allFindings);
+          checkUnsafeDirectives(parsedCsp, allFindings);
+          checkNonceLength(parsedCsp, allFindings);
+          checkPlainUrlSchemes(parsedCsp, allFindings);
+          checkStrictDynamic(parsedCsp, allFindings);
+          checkUnsafeInlineFallback(parsedCsp, allFindings);
+          checkReportingConfiguration(parsedCsp, allFindings);
+          checkDeprecatedDirectives(parsedCsp, allFindings);
+          checkTrustedTypes(parsedCsp, allFindings);
+          checkScriptSrcHostWhitelists(parsedCsp, allFindings, KNOWN_JSONP_HOSTS);
+          checkScriptSrcAngular(parsedCsp, allFindings, KNOWN_ANGULAR_HOSTS); // New check
+          checkSrcHttp(parsedCsp, allFindings);                              // New check
+          checkIpSource(parsedCsp, allFindings);                             // New check
+
+          // Apply effective CSP analysis
+          java.util.Map<String, java.util.List<String>> effectiveCsp = getEffectiveCsp(parsedCsp, CspVersion.CSP3);
+          
+          // Group findings by directive and severity
+          java.util.Map<String, java.util.List<CspFinding>> directiveFindings = new java.util.LinkedHashMap<>();
+          java.util.List<CspFinding> globalFindings = new java.util.ArrayList<>();
+          
+          for (CspFinding finding : allFindings) {
+            if (finding.directive == null) {
+                globalFindings.add(finding);
+            } else {
+                directiveFindings
+                    .computeIfAbsent(finding.directive, k -> new java.util.ArrayList<>())
+                    .add(finding);
+            }
+          }
+          
+          // Display findings - ADDED THIS CODE TO REPLACE THE COMMENT
+          logging.logToOutput("\n=== CSP Analysis Results ===");
+          
+          // First display global findings
+          if (!globalFindings.isEmpty()) {
+              logging.logToOutput("\nGlobal Issues:");
+              for (CspFinding finding : globalFindings) {
+                  String prefix = getTypePrefix(finding.severity.getLabel());
+                  logging.logToOutput("  " + prefix + finding.getMessageAndRecommendation());
+              }
+          }
+          
+          // Then display directive-specific findings
+          if (!directiveFindings.isEmpty()) {
+              for (String directive : directiveFindings.keySet()) {
+                  logging.logToOutput("\nIssues with '" + directive + "' directive:");
+                  java.util.List<CspFinding> findings = directiveFindings.get(directive);
+                  
+                  // Sort findings by severity (HIGH to LOW)
+                  findings.sort((f1, f2) -> f1.severity.compareTo(f2.severity));
+                  
+                  for (CspFinding finding : findings) {
+                      String prefix = getTypePrefix(finding.severity.getLabel());
+                      String valueInfo = finding.sourceValue != null ? " (for value '" + finding.sourceValue + "')" : "";
+                      logging.logToOutput("  " + prefix + finding.getMessageAndRecommendation() + valueInfo);
+                  }
+              }
+          }
+          
+          // Display a summary if no findings
+          if (globalFindings.isEmpty() && directiveFindings.isEmpty()) {
+              logging.logToOutput("\nNo issues found with this CSP policy.");
+          }
+          
+          logging.logToOutput(""); // Empty line for better readability between policies
+        }
+    } catch (Exception e) {
+        logging.logToError("Error during CSP analysis: " + e.getClass().getName() + ": " + e.getMessage());
+        for (int i=0; i<Math.min(e.getStackTrace().length,5); i++) logging.logToError("  at " + e.getStackTrace()[i].toString());
+      }
+    }
+  }
+
+  CspEvaluationHelpers.evaluateCspPolicy(requestResponse, logging);
