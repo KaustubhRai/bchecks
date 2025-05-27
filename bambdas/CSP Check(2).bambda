@@ -1,0 +1,95 @@
+/**
+ * Generic CSPv3 evaluator with full script-src checks.
+ */
+
+// 1) Grab any CSP header
+String csp = null;
+for (var hdr : requestResponse.response().headers()) {
+    String name = hdr.name().toLowerCase();
+    if (name.startsWith("content-security-policy")) {
+        csp = hdr.value();
+        break;
+    }
+}
+if (csp == null || csp.isEmpty()) {
+    logging().logToOutput("❌ No CSP header found");
+    return;
+}
+
+// 2) Parse into ordered map of directives→sources
+String[] parts = csp.split(";");
+java.util.Map<String, java.util.List<String>> dirs = new java.util.LinkedHashMap<>();
+for (String part : parts) {
+    String[] tok = part.trim().split("\\s+");
+    if (tok.length < 2) continue;
+    java.util.List<String> vals = java.util.Arrays.asList(
+        java.util.Arrays.copyOfRange(tok, 1, tok.length)
+    );
+    dirs.put(tok[0], vals);
+}
+
+// 3) List each directive and its sources
+for (String dir : dirs.keySet()) {
+    logging().logToOutput("=== " + dir + " ===");
+    for (String v : dirs.get(dir)) {
+        logging().logToOutput("✔ " + v);
+    }
+}
+
+// 4) Full script-src evaluation
+if (dirs.containsKey("script-src")) {
+    logging().logToOutput("=== script-src checks ===");
+    java.util.List<String> ss = dirs.get("script-src");
+
+    // 4.1 Nonce + strict-dynamic
+    boolean hasNonce  = ss.stream().anyMatch(v -> v.startsWith("'nonce-"));
+    boolean hasStrict = ss.contains("'strict-dynamic'");
+    if (!hasStrict) {
+        logging().logToOutput("❌ Host allowlists can frequently be bypassed. Consider using 'strict-dynamic' in combination with CSP nonces or hashes.");
+    }
+
+    // 4.2 'self' caveat
+    if (ss.contains("'self'")) {
+        logging().logToOutput("ℹ 'self' can be problematic if you host JSONP, AngularJS or user-uploaded files.");
+    }
+
+    // 4.3 unsafe-inline / unsafe-eval
+    if (ss.contains("'unsafe-inline'")) {
+        logging().logToOutput("❌ 'unsafe-inline' allows execution of unsafe in-page scripts and event handlers.");
+    }
+    if (ss.contains("'unsafe-eval'")) {
+        logging().logToOutput("ℹ 'unsafe-eval' allows execution of code injected into DOM APIs such as eval().");
+    }
+
+    // 4.4 Wildcard hosts
+    if (ss.stream().anyMatch(v -> v.contains("*"))) {
+        logging().logToOutput("⚠ Host wildcards can be bypassed; narrow allowlists or use nonces.");
+    }
+
+    // 4.5 JSONP/Angular host checks
+    java.util.List<String> jsonpHosts = java.util.Arrays.asList(
+        "google-analytics.com",
+        "googletagmanager.com",
+        "cdnjs.cloudflare.com"
+    );
+    for (String v : ss) {
+        for (String bad : jsonpHosts) {
+            if (v.contains(bad)) {
+                logging().logToOutput("❌ " + v + " is known to host JSONP/Angular endpoints which can bypass CSP.");
+            }
+        }
+    }
+} else {
+    // 4.6 Missing script-src entirely
+    logging().logToOutput("❌ script-src [missing]\n    script-src directive is missing.");
+}
+
+// 5) Missing object-src?
+if (!dirs.containsKey("object-src")) {
+    logging().logToOutput("❌ object-src [missing]\n    Missing object-src allows plugins that can execute JavaScript. Set it to 'none'.");
+}
+
+// 6) Trusted Types
+if (!csp.contains("require-trusted-types-for 'script'")) {
+    logging().logToOutput("ℹ require-trusted-types-for [missing]\n    Consider requiring Trusted Types to lock down DOM XSS sinks.");
+}
