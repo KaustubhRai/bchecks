@@ -1,8 +1,8 @@
 /**
    * Evaluates Content-Security-Policy headers from an HTTP response.
-   * Function - Custom Action
-	* Location - Repeater
-	* Author - Kaustubh
+   * Refactored for Burp Custom Actions.
+   * All classes and methods are static within a wrapper or use fully qualified names.
+   * No top-level import statements.
 */
 
   // --- Container for static helper methods and classes ---
