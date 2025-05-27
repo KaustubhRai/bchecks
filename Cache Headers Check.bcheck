@@ -1,15 +1,133 @@
 metadata:
     language: v2-beta
-    name: "Cache Headers Check"
-    description: "Checks cache headers on sensitive pages"
+    name: "Cache Headers Security Check"
+    description: "Comprehensive cache header security analysis"
     author: "Kaustubh"
 
 given response then
-    if ({latest.response.headers} matches "Cache-Control: public") or 
-       ({latest.response.headers} matches "Expires:") then
+    # Cache-Control Header Analysis
+    if ({latest.response.headers} matches "Cache-Control") then
+        # Dangerous: Explicit public caching
+        if ({latest.response.headers} matches "Cache-Control" and {latest.response.headers} matches "public") then
+            report issue and continue:
+                severity: high
+                confidence: firm
+                detail: "Cache-Control header contains 'public' directive, allowing caching by shared caches (proxies, CDNs)."
+                remediation: "Replace 'public' with 'private' or use 'no-cache, no-store' for sensitive content."
+        end if
+        
+        # Dangerous: Long max-age without proper restrictions
+        if ({latest.response.headers} matches "max-age") and 
+           not ({latest.response.headers} matches "private") then
+            report issue and continue:
+                severity: medium
+                confidence: firm
+                detail: "Cache-Control has long max-age without 'private' directive, allowing prolonged shared caching."
+                remediation: "Add 'private' directive or reduce max-age value for sensitive content."
+        end if
+        
+        # Missing critical no-store for sensitive content
+        if not ({latest.response.headers} matches "no-store") and
+           not ({latest.response.headers} matches "no-cache") then
+            report issue and continue:
+                severity: medium
+                confidence: firm
+                detail: "Cache-Control lacks 'no-store' or 'no-cache' directives, allowing potential caching."
+                remediation: "Add 'no-store' to prevent any caching, or 'no-cache' to require validation."
+        end if
+        
+        # Weak: Only no-cache without no-store
+        if ({latest.response.headers} matches "no-cache") and
+           not ({latest.response.headers} matches "no-store") then
+            report issue and continue:
+                severity: low
+                confidence: firm
+                detail: "Cache-Control uses 'no-cache' but lacks 'no-store'. Content may still be stored by caches."
+                remediation: "Add 'no-store' directive to prevent storage: 'Cache-Control: no-cache, no-store, must-revalidate'."
+        end if
+        
+        # Missing must-revalidate
+        if ({latest.response.headers} matches "no-cache") and
+           not ({latest.response.headers} matches "must-revalidate") then
+            report issue and continue:
+                severity: low
+                confidence: firm
+                detail: "Cache-Control has 'no-cache' but lacks 'must-revalidate' directive."
+                remediation: "Add 'must-revalidate' to ensure cache validation: 'Cache-Control: no-cache, must-revalidate'."
+        end if
+    end if
+    
+    # Missing Cache-Control header entirely
+    if not ({latest.response.headers} matches "Cache-Control") then
         report issue and continue:
-            severity: low
+            severity: high
             confidence: firm
-            detail: "Sensitive pages might be cacheable."
-            remediation: "Set cache headers to prevent caching of sensitive pages."
+            detail: "Missing Cache-Control header. Browser and proxy default caching behavior will apply."
+            remediation: "Add Cache-Control header: 'Cache-Control: no-cache, no-store, must-revalidate' for sensitive content or 'Cache-Control: private' for user-specific content."
+    end if
+    
+    # Expires Header Analysis (HTTP/1.0 legacy)
+    if ({latest.response.headers} matches "Expires") then
+        # Future expiry date (allows caching)
+        if ({latest.response.headers} matches "202") or ({latest.response.headers} matches "203") then
+            report issue and continue:
+                severity: medium
+                confidence: firm
+                detail: "Expires header set to future date, enabling HTTP/1.0 caching."
+                remediation: "Set 'Expires: Thu, 01 Jan 1970 00:00:00 GMT' to disable caching or remove header entirely."
+        end if
+    end if
+    
+    # Pragma Header Analysis (HTTP/1.0 compatibility)
+    if ({latest.response.headers} matches "Pragma") then
+        if not ({latest.response.headers} matches "no-cache") then
+            report issue and continue:
+                severity: low
+                confidence: firm
+                detail: "Pragma header present but doesn't contain 'no-cache'."
+                remediation: "Set 'Pragma: no-cache' for HTTP/1.0 compatibility."
+        end if
+    end if
+    
+    # Missing Pragma for HTTP/1.0 compatibility
+    if ({latest.response.headers} matches "no-cache") and not ({latest.response.headers} matches "Pragma") then
+        report issue and continue:
+            severity: info
+            confidence: tentative
+            detail: "Missing Pragma header for HTTP/1.0 client compatibility."
+            remediation: "Add 'Pragma: no-cache' header for complete HTTP/1.0 cache prevention."
+    end if
+    
+    # ETag Header Analysis
+    if ({latest.response.headers} matches "ETag") then
+        # ETag without proper cache control
+        if not ({latest.response.headers} matches "no-store") and
+           not ({latest.response.headers} matches "no-cache") then
+            report issue and continue:
+                severity: low
+                confidence: firm
+                detail: "ETag present without cache prevention directives, enabling conditional requests."
+                remediation: "Remove ETag header for sensitive content or ensure proper Cache-Control directives."
+        end if
+    end if
+    
+    # Last-Modified Header Analysis
+    if ({latest.response.headers} matches "Last-Modified") then
+        if not ({latest.response.headers} matches "no-store") and
+           not ({latest.response.headers} matches "no-cache") then
+            report issue and continue:
+                severity: low
+                confidence: firm
+                detail: "Last-Modified header enables conditional requests and heuristic caching."
+                remediation: "Remove Last-Modified header for sensitive content or add explicit cache prevention directives."
+        end if
+    end if
+    
+    # Age Header Analysis
+    if ({latest.response.headers} matches "Age") then
+        report issue and continue:
+            severity: info
+            confidence: firm
+            detail: "Age header indicates response was served from cache."
+            remediation: "Verify this is intentional. For sensitive content, ensure proper cache prevention."
     end if
