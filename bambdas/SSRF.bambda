@@ -1,3 +1,9 @@
+/**
+   * Check SSRF on a individual request, using custom action in the repeater tab. 
+   * Check in logger tab, if want to confirm where the payload was injected
+   * Check Collaborator's Dashboard, and do manual polling again
+*/
+
 // Generate a unique ID with timestamp for precise tracking
 String uniqueId = "ssrf-" + System.currentTimeMillis();
 
