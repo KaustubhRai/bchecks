@@ -1,0 +1,58 @@
+Additional CSRF Checks
+Additional Scanner Checks
+CSRF Scanner
+JS Miner
+NGINX Alias Traversal
+NoSQLi Scanner
+Pentest Mapper
+Retire.js
+Upload Scanner
+Server Side Prototype Pollution Scanner
+Keyword Scanner
+Add to TLS PassThrough Scanner
+Postman Integration
+GAP
+Turbo Intruder
+Extensibility Helper
+Logger++
+JSON Web Token Attacker
+Hackvertor
+SignSaboteur, Web Token Signer
+NoWAFpls
+InQL-GraphQL Scanner
+Sensitive Discoverer
+Host Header Inchecktion
+Param Miner
+Headers Analyser
+Request Minimizer
+XSS Cheatsheet
+Copy to BCheck
+CORS*, Addtional CORS Checks
+Backslash Powered Scanner
+Agartha
+Anonymous Cloud
+Auth Analyzer
+Autowasp
+PHP Object Injection Slinger
+Active Scan ++
+SAML Raider
+CSTC, Modular HTTP Manipulator
+Shadow Repeater
+AI HTTP Analyzer
+Trufflehog Integration
+MCP Server
+ReportLM
+AI Prompt Fuzzer
+Autorize
+AutoRepeater
+AI Recon Assistant
+JSON Web Tokens
+JWT Editor
+Reshaper
+AuthMatrix
+Scan Manual Insertion Point
+Collaborator Everywhere
+Batch Scan Report Generator
+HTTP Hacker
+HTTP Request Smuggler
+Local LLM Assistant - (Mine)
