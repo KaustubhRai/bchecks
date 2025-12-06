@@ -1,0 +1,52 @@
+metadata:
+    language: v2-beta
+    name: "Infrastructure and Database Disclosure Detection"
+    description: "Extensive scanning of response bodies for database errors (SQL/NoSQL), application stack traces (Node, Java, Python, Go, Ruby, PHP, .NET), cloud metadata, and system file leaks."
+    author: "Kaustubh"
+    tags: "passive", "information-disclosure", "database", "infrastructure", "cloud", "modern-stack"
+
+given response then
+    # Optimization: specific checks to skip binary files to save resources
+    if not({latest.response.headers} matches "Content-Type: (image|video|audio|application/pdf|application/octet-stream|font)") then
+
+        # --- CATEGORY 1: DATABASE ERRORS (SQL & NoSQL) ---
+        # Covers: MySQL, PostgreSQL, MSSQL, Oracle, SQLite, MongoDB, Redis, Elasticsearch, Sybase, DB2
+        if {latest.response.body} matches "(?i)(redis|SQL syntax.*MySQL|Warning.*mysql_.*|valid MySQL result|MySqlClient\.|PostgreSQL.*ERROR|Driver.* SQL[\-\_]*Server|ORA\-[0-9]{5}|Microsoft OLE DB Provider for SQL Server|SQLServer JDBC Driver|System\.Data\.SqlClient\.|Unclosed quotation mark after the character string|SQLite3::SQLException|SQLite error|MongoError|MongoNetworkError|Redis::CommandError|ERR operation not permitted|ActionController::InvalidAuthenticityToken|PG::Error|ODBC SQL Server Driver|CLI01|DB2 SQL Error|Sybase message|TNS:connect timeout|Unknown column ')" then
+            report issue:
+                severity: low
+                confidence: firm
+                detail: "The application returned a response containing specific database error messages. This reveals information about the backend database technology (SQL or NoSQL) and potentially the structure of queries."
+                remediation: "Configure the application to suppress verbose error messages and return generic error pages to the user."
+        end if
+
+        # --- CATEGORY 2: MODERN APP STACK TRACES & ERRORS ---
+        # Covers: Node.js, Python, Ruby, Go, PHP, ASP.NET, Java
+        if {latest.response.body} matches "(ReferenceError:.+at |TypeError:.+at |/node_modules/|SyntaxError:.+at |Traceback \(most recent call last\)|django\.core\.exceptions|ModuleNotFoundError|Goroutine [0-9]+|panic: runtime error|/app/|/usr/local/go/src|System\.Web\.HttpException|server error in '/' application|NullReferenceException|at java\.lang\.|nested exception is|org\.springframework\.|Fatal error: require\(|Warning: include\(|Unexpected end of input in|Uncaught exception|Whoops! There was an error|Did you mean to run this command?)" then
+            report issue:
+                severity: low
+                confidence: firm
+                detail: "The application returned a response containing internal application stack traces or debug errors. This discloses the runtime environment (Node, Python, Go, etc.), library versions, and directory structure."
+                remediation: "Disable debug mode in production environments and ensure exception handling catches errors without exposing stack traces."
+        end if
+
+        # --- CATEGORY 3: CLOUD, CONTAINER & ORCHESTRATION LEAKS ---
+        # Covers: AWS, Azure, GCP, Kubernetes, Docker, Terraform
+        if {latest.response.body} matches "(s3\.amazonaws\.com|s3://[\w-]+|storage\.googleapis\.com|core\.windows\.net|blob\.core\.windows\.net|azure-storage|amazonaws\.com.*Key|AWS_ACCESS_KEY_ID|GoogleCloudStorage|metadata\.google\.internal|169\.254\.169\.254|kube-system|kubectl|etcd|/var/run/secrets/kubernetes\.io|docker-compose|/var/lib/docker|\.dockerenv|terraform\.tfstate)" then
+             report issue:
+                severity: medium
+                confidence: tentative
+                detail: "The response contains strings resembling cloud infrastructure references (AWS/GCP/Azure), container orchestration details (K8s/Docker), or infrastructure-as-code artifacts."
+                remediation: "Review the response to ensure no internal cloud resource names, metadata endpoints, or container configurations are exposed to unauthenticated users."
+        end if
+
+        # --- CATEGORY 4: SYSTEM FILES & CRITICAL SECRETS ---
+        # Covers: SSH keys, /etc/passwd variants, Git config, Generic 'Secret' patterns
+        if {latest.response.body} matches "(root:x:0:0:|/bin/bash|/etc/passwd|/etc/shadow|/etc/hosts|C:\\Windows\\System32|C:\\inetpub\\|BEGIN RSA PRIVATE KEY|BEGIN OPENSSH PRIVATE KEY|Authorization: Bearer [a-zA-Z0-9\-\._~\+\/]+=*|\.git/config|<<<<<<< HEAD)" then
+            report issue:
+                severity: high
+                confidence: firm
+                detail: "The response contains indicators of critical system file leakage (/etc/passwd), private keys (SSH/RSA), or version control artifacts (.git). This is a critical security risk."
+                remediation: "Investigate immediately. Ensure strict access controls are in place and that the server is not misconfigured to serve sensitive system files or hidden directories."
+        end if
+
+    end if
